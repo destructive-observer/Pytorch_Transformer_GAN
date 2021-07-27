@@ -139,21 +139,21 @@ class Attention(nn.Module):
             nn.Linear(inner_dim, dim),
             nn.Dropout(dropout)
         )
-        self.relative_position_bias_table = nn.Parameter(
-            torch.zeros((2 * window_size - 1) * (2 * window_size - 1), heads))  # 2*Wh-1 * 2*Ww-1, nH
+        # self.relative_position_bias_table = nn.Parameter(
+        #     torch.zeros((2 * window_size - 1) * (2 * window_size - 1), heads))  # 2*Wh-1 * 2*Ww-1, nH
 
-        # get pair-wise relative position index for each token inside the window
-        coords_h = torch.arange(window_size)
-        coords_w = torch.arange(window_size)
-        coords = torch.stack(torch.meshgrid([coords_h, coords_w]))  # 2, Wh, Ww
-        coords_flatten = torch.flatten(coords, 1)  # 2, Wh*Ww
-        relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]  # 2, Wh*Ww, Wh*Ww
-        relative_coords = relative_coords.permute(1, 2, 0).contiguous()  # Wh*Ww, Wh*Ww, 2
-        relative_coords[:, :, 0] += window_size - 1  # shift to start from 0
-        relative_coords[:, :, 1] += window_size - 1
-        relative_coords[:, :, 0] *= 2 * window_size - 1
-        relative_position_index = relative_coords.sum(-1)  # Wh*Ww, Wh*Ww
-        self.register_buffer("relative_position_index", relative_position_index)
+        # # get pair-wise relative position index for each token inside the window
+        # coords_h = torch.arange(window_size)
+        # coords_w = torch.arange(window_size)
+        # coords = torch.stack(torch.meshgrid([coords_h, coords_w]))  # 2, Wh, Ww
+        # coords_flatten = torch.flatten(coords, 1)  # 2, Wh*Ww
+        # relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]  # 2, Wh*Ww, Wh*Ww
+        # relative_coords = relative_coords.permute(1, 2, 0).contiguous()  # Wh*Ww, Wh*Ww, 2
+        # relative_coords[:, :, 0] += window_size - 1  # shift to start from 0
+        # relative_coords[:, :, 1] += window_size - 1
+        # relative_coords[:, :, 0] *= 2 * window_size - 1
+        # relative_position_index = relative_coords.sum(-1)  # Wh*Ww, Wh*Ww
+        # self.register_buffer("relative_position_index", relative_position_index)
     def forward(self, x):
         b, n, _, h = *x.shape, self.heads
         # print('self.to_qkv {}'.format(self.to_qkv))
@@ -195,11 +195,11 @@ def G_transformer(incoming, dim, heads,dim_head, dropout,mlp_dim,curr_patchsize,
             PixelNormLayer(),
                Residual(                
                 #  FeedForward(dim, mlp_dim, dropout = dropout),
-                 FeedForward(dim, mlp_dim, dropout = dropout),
+                 FeedForward(dim, mlp_dim*4, dropout = dropout),
                  dropout,
                  ),                
                 # nn.LeakyReLU(negative_slope=0.2),
-                 Rearrange('(h w b) (p1 p2) c -> b c (p1 h) (p2 w)', p1 = curr_patchsize, p2 = curr_patchsize,c=channel,h=curr_num,w=curr_num)     
+                 Rearrange('(h w b) (p1 p2) c -> b c (p1 h) (p2 w)', p1 = curr_patchsize, p2 = curr_patchsize,c=channel*4,h=curr_num,w=curr_num)     
                 #    nn.GELU(),
                 #    )
                ]
@@ -412,8 +412,9 @@ class Generator(nn.Module):
             last_patchsize,last_dim,last_num = self.get_patch_dim(I-1,base_size,max_patch,num_channels,first_resolution)
             print('following curr_dim {}, curr_patchsize {}'.format(curr_dim,curr_patchsize))
             # layers = [nn.Upsample(scale_factor=2, mode='nearest')]  # upsample
-            layers = [nn.Upsample(scale_factor=2, mode='bicubic')]  # 2D->upsample mul 2
+            # layers = [nn.Upsample(scale_factor=2, mode='bicubic')]  # 2D->upsample mul 2
             # layers = [nn.ConvTranspose2d(64,64,4,2,1)]
+            layers = [nn.PixShuffle(2)]
             # layers +=[Rearrange('b n (p1 p2 c d) -> b (n d) (p1 p2 c)',p1=last_patchsize,p2=last_patchsize,d=4)]
             layers = G_transformer(layers,dim,heads,dim_head,dropout,mlp_dim,curr_patchsize,channel,curr_dim,curr_num,num_channels,curr_dim)
             # layers = G_conv(layers, ic, oc, 3, 1, act, iact, negative_slope, False, self.use_wscale, self.use_batchnorm, self.use_pixelnorm)
